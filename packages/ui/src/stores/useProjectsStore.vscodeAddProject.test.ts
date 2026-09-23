@@ -70,18 +70,6 @@ const opencodeClientStub = new Proxy(
     },
   },
 );
-const opencodeModule = await import('@/lib/opencode/client');
-mock.module('@/lib/opencode/client', () => ({
-  ...opencodeModule,
-  opencodeClient: opencodeClientStub,
-}));
-const persistenceModule = await import('@/lib/persistence');
-mock.module('@/lib/persistence', () => ({
-  ...persistenceModule,
-  updateDesktopSettings: async () => ({ ok: true }),
-  loadDesktopSettings: async () => null,
-}));
-
 const addWorkspaceFolderCalls: string[] = [];
 let addWorkspaceFolderError: Error | null = null;
 
@@ -104,6 +92,18 @@ mock.module('@/contexts/runtimeAPIRegistry', () => ({
     },
   }),
   registerRuntimeAPIs: () => {},
+}));
+
+const opencodeModule = await import('@/lib/opencode/client');
+mock.module('@/lib/opencode/client', () => ({
+  ...opencodeModule,
+  opencodeClient: opencodeClientStub,
+}));
+const persistenceModule = await import('@/lib/persistence');
+mock.module('@/lib/persistence', () => ({
+  ...persistenceModule,
+  updateDesktopSettings: async () => ({ ok: true }),
+  loadDesktopSettings: async () => null,
 }));
 
 const { useProjectsStore } = await import('@/stores/useProjectsStore');

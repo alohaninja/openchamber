@@ -123,6 +123,7 @@ const resetStore = () => {
     registryInfo: {},
     isLoadingRegistry: false,
     draft: null,
+    runtime: { kind: 'idle' },
   });
 };
 
@@ -163,6 +164,7 @@ describe('usePluginsStore', () => {
     expect(usePluginsStore.getState().entries).toEqual([entry]);
     expect(usePluginsStore.getState().files).toEqual([file]);
     expect(usePluginsStore.getState().isLoading).toBe(false);
+    expect(usePluginsStore.getState().runtime.kind).toBe('ready');
   });
 
   for (const status of [200, 500]) {

@@ -139,6 +139,21 @@ mock.module('@/stores/useProjectsStore', () => ({
   },
 }));
 
+mock.module('@/contexts/runtimeAPIRegistry', () => ({
+  getRegisteredRuntimeAPIs: mock(() => null),
+}));
+
+mock.module('@/lib/runtime-fetch', () => ({
+  runtimeFetch: mock(async () => new Response(JSON.stringify({}), {
+    headers: { 'Content-Type': 'application/json' },
+  })),
+}));
+
+mock.module('@/lib/startupTrace', () => ({
+  markStartupTrace: mock(() => undefined),
+  measureStartupTrace: mock(async (_name: string, callback: () => Promise<unknown>) => callback()),
+}));
+
 const opencodeModule = await import('@/lib/opencode/client');
 mock.module('@/lib/opencode/client', () => ({
   ...opencodeModule,
@@ -184,16 +199,6 @@ mock.module('@/lib/opencode/client', () => ({
   },
 }));
 
-mock.module('@/contexts/runtimeAPIRegistry', () => ({
-  getRegisteredRuntimeAPIs: mock(() => null),
-}));
-
-mock.module('@/lib/runtime-fetch', () => ({
-  runtimeFetch: mock(async () => new Response(JSON.stringify({}), {
-    headers: { 'Content-Type': 'application/json' },
-  })),
-}));
-
 const persistenceModule = await import('@/lib/persistence');
 mock.module('@/lib/persistence', () => ({
   ...persistenceModule,
@@ -204,11 +209,6 @@ mock.module('@/lib/persistence', () => ({
     settingsLoadCalls += 1;
     return loadSettingsImpl ? loadSettingsImpl() : persistedOpenChamberSettings;
   }),
-}));
-
-mock.module('@/lib/startupTrace', () => ({
-  markStartupTrace: mock(() => undefined),
-  measureStartupTrace: mock(async (_name: string, callback: () => Promise<unknown>) => callback()),
 }));
 
 mock.module('@/lib/configSync', () => ({

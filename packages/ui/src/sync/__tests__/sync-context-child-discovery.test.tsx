@@ -49,7 +49,6 @@ const listSessionsPage = async (options: SessionListOptions = {}): Promise<Sessi
   return { sessions: [], cursor: {} }
 }
 
-let sequence = 0
 // Staleness checks compare client identity across awaits, so these must be
 // stable references rather than a fresh object per call.
 const sdkIdentity = {}
@@ -57,7 +56,6 @@ const sdkIdentity = {}
 const opencodeModule = await import('@/lib/opencode/client')
 mock.module('@/lib/opencode/client', () => ({
   ...opencodeModule,
-  ascendingId: (prefix: string) => `${prefix}_${(sequence += 1).toString().padStart(6, '0')}`,
   isOpencodeNotFound: () => false,
   OPENCODE_DIRECTORY_HEADER: 'x-opencode-directory',
   opencodeClient: {
