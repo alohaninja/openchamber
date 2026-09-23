@@ -18,9 +18,14 @@ mock.module('@/stores/useProjectsStore', () => ({
   },
 }));
 
+const opencodeModule = await import('@/lib/opencode/client');
+const sdkClientStub = { plugin: { list: async () => ({ data: [] }) } };
 mock.module('@/lib/opencode/client', () => ({
+  ...opencodeModule,
   opencodeClient: {
     getDirectory: () => '/fallback/project',
+    getSdkClient: () => sdkClientStub,
+    getScopedSdkClient: () => sdkClientStub,
   },
 }));
 

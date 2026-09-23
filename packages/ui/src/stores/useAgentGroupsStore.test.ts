@@ -21,7 +21,9 @@ sessions.push({ ...sessions[0], id: 'fork' });
 let failList = false;
 const deleted: string[] = [];
 
+const opencodeModule = await import('@/lib/opencode/client');
 mock.module('@/lib/opencode/client', () => ({
+  ...opencodeModule,
   opencodeClient: {
     setDirectory: () => undefined,
     getDirectory: () => '/group-test',

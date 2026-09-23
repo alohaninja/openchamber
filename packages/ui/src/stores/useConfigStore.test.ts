@@ -139,7 +139,9 @@ mock.module('@/stores/useProjectsStore', () => ({
   },
 }));
 
+const opencodeModule = await import('@/lib/opencode/client');
 mock.module('@/lib/opencode/client', () => ({
+  ...opencodeModule,
   opencodeClient: {
     setDirectory: mock(() => undefined),
     getDirectory: mock(() => DIRECTORY),
@@ -192,7 +194,9 @@ mock.module('@/lib/runtime-fetch', () => ({
   })),
 }));
 
+const persistenceModule = await import('@/lib/persistence');
 mock.module('@/lib/persistence', () => ({
+  ...persistenceModule,
   updateDesktopSettings: mock(async () => ({ ok: true })),
   // The store reads the shared document through this; an empty document
   // keeps every OpenChamber default unset, like the settings route used to.

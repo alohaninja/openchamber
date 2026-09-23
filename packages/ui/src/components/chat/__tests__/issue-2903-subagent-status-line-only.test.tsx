@@ -29,7 +29,9 @@ mock.module('@/components/ui', () => ({
   toast: { info: () => undefined, error: () => undefined, success: () => undefined },
 }));
 let mockIdCounter = 0;
+const opencodeModule = await import('@/lib/opencode/client');
 mock.module('@/lib/opencode/client', () => ({
+  ...opencodeModule,
   ascendingId: (prefix: string) => `${prefix}_${(mockIdCounter += 1).toString(16).padStart(12, '0')}`,
   opencodeClient: {
     getDirectory: () => '/repo',
