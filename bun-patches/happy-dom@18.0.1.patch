@@ -22,6 +22,14 @@ index f2b9090aef88bdba2e52cd0e307dbedd35cc2006..c31e7cb3d3f6d90a304edeceb9535a05
          };
          this.#window = init.window;
          this.#observer = init.observer;
+@@ -85,6 +89,7 @@ class MutationObserverListener {
+         this.#destroyed = true;
+         this.options = null;
+         this.target = null;
++        this.#listenerCallback = null;
+         this.mutationListener = null;
+         this.#window = null;
+         this.#observer = null;
 diff --git a/lib/mutation-observer/MutationObserverListener.js b/lib/mutation-observer/MutationObserverListener.js
 index 3a68b9a76db624429603fb6847a7130769323773..2f7882b480c4f5da84fcb63bc59c7f474a1d0c79 100644
 --- a/lib/mutation-observer/MutationObserverListener.js
@@ -46,3 +54,11 @@ index 3a68b9a76db624429603fb6847a7130769323773..2f7882b480c4f5da84fcb63bc59c7f47
          };
          this.#window = init.window;
          this.#observer = init.observer;
+@@ -83,6 +87,7 @@ export default class MutationObserverListener {
+         this.#destroyed = true;
+         this.options = null;
+         this.target = null;
++        this.#listenerCallback = null;
+         this.mutationListener = null;
+         this.#window = null;
+         this.#observer = null;
