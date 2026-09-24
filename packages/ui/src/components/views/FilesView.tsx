@@ -66,6 +66,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { useFilesViewTabsStore } from '@/stores/useFilesViewTabsStore';
 import { useGitStatus, useGitStore } from '@/stores/useGitStore';
 import { DirectoryRequests } from './files/directoryRequests';
+import { useFileTreeUpload } from './files/useFileTreeUpload';
 import { areDirectoryNodesEqual, buildFileTreeStatusIndex } from './files/fileTreeStatus';
 import { BinaryArtifact } from './files/previews/BinaryArtifact';
 import { FontArtifact } from './files/previews/FontArtifact';
@@ -374,6 +375,8 @@ interface FileRowProps {
   onToggle: (path: string) => void;
   onRevealPath: (path: string) => void;
   onOpenDialog: (type: 'createFile' | 'createFolder' | 'rename' | 'delete', data: { path: string; name?: string; type?: 'file' | 'directory' }) => void;
+  canUpload: boolean;
+  onPickFiles: (directory: string) => void;
 }
 
 const FileRow: React.FC<FileRowProps> = ({
@@ -396,13 +399,16 @@ const FileRow: React.FC<FileRowProps> = ({
   onToggle,
   onRevealPath,
   onOpenDialog,
+  canUpload,
+  onPickFiles,
 }) => {
   const { t } = useI18n();
   const isDir = node.type === 'directory';
   const { canRename, canCreateFile, canCreateFolder, canDelete, canReveal } = permissions;
   const canDownload = !isDir && Boolean(downloadFile);
   const canRevealPath = canReveal && !isBrowserClient;
-  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canDelete || canDownload || canRevealPath;
+  const canUploadHere = isDir && canUpload;
+  const hasMenuActions = canRename || canCreateFile || canCreateFolder || canUploadHere || canDelete || canDownload || canRevealPath;
 
   const handleContextMenu = React.useCallback((event?: React.MouseEvent) => {
     if (!hasMenuActions) {
@@ -480,7 +486,7 @@ const FileRow: React.FC<FileRowProps> = ({
           <Icon name="folder-received" className="mr-2 size-4" /> {t(getRevealLabelKey())}
         </Item>
       )}
-      {isDir && (canCreateFile || canCreateFolder) && (
+      {isDir && (canCreateFile || canCreateFolder || canUploadHere) && (
         <>
           <Separator />
           {canCreateFile && (
@@ -491,6 +497,11 @@ const FileRow: React.FC<FileRowProps> = ({
           {canCreateFolder && (
             <Item onClick={(e: React.MouseEvent) => { e.stopPropagation(); onOpenDialog('createFolder', node); }}>
               <Icon name="folder-add" className="mr-2 size-4" /> {t('sidebarFilesTree.menu.newFolder')}
+            </Item>
+          )}
+          {canUploadHere && (
+            <Item onClick={(e: React.MouseEvent) => { e.stopPropagation(); onPickFiles(node.path); }}>
+              <Icon name="upload-2" className="mr-2 size-4" /> {t('sidebarFilesTree.menu.uploadFiles')}
             </Item>
           )}
         </>
@@ -1183,6 +1194,26 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
     };
   }, [cancel, commentText, editingDraftId, lineSelection]);
 
+  // Touch devices: while the comment bar is open, the line range is shown by
+  // the highlightLines decoration. Any native text selection left in the
+  // editor makes Android/iOS draw their copy/paste toolbar right over the bar,
+  // so collapse it. Desktop keeps its selection untouched.
+  React.useEffect(() => {
+    if (!isMobile || !lineSelection) return;
+    const view = editorViewRef.current;
+    if (!view) return;
+
+    const main = view.state.selection.main;
+    if (!main.empty) {
+      view.dispatch({ selection: { anchor: main.head } });
+    }
+
+    const domSelection = document.getSelection();
+    if (domSelection && !domSelection.isCollapsed && domSelection.anchorNode && view.contentDOM.contains(domSelection.anchorNode)) {
+      domSelection.removeAllRanges();
+    }
+  }, [isMobile, lineSelection]);
+
   const handleSaveComment = React.useCallback((text: string, range?: { start: number; end: number }) => {
     const finalRange = range ?? lineSelection ?? undefined;
     if (range) {
@@ -1296,6 +1327,14 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
     loadedDirsRef.current.delete(normalized);
     await loadDirectory(normalized, true);
   }, [loadDirectory, refreshRoot]);
+
+  const {
+    canUpload,
+    uploadingDirectory,
+    pickFiles,
+    uploadElements,
+  } = useFileTreeUpload({ root, refreshDirectory });
+  const isUploading = uploadingDirectory !== null;
 
   const lastFileScopeRef = React.useRef<string>('');
   const lastFilesViewTreeKeyRef = React.useRef<string>('');
@@ -2400,6 +2439,8 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
             onToggle={toggleDirectory}
             onRevealPath={handleRevealPath}
             onOpenDialog={handleOpenDialog}
+            canUpload={canUpload && !isUploading}
+            onPickFiles={pickFiles}
           />
           {isDir && isExpanded && (
             <ul className="flex flex-col gap-1 ml-3 pl-3 border-l border-border/40 relative">
@@ -2992,7 +3033,17 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   ]);
 
   const nudgeEditorSelectionAboveKeyboard = React.useCallback((view: EditorView | null) => {
-    if (!isMobile || !view || !view.hasFocus || typeof window === 'undefined') {
+    if (!isMobile || !view || typeof window === 'undefined') {
+      return;
+    }
+
+    // The inline comment bar is a block widget inside the editor; once its
+    // textarea takes focus the editor itself loses focus, so track the bar.
+    const activeElement = document.activeElement;
+    const commentInput = !view.hasFocus && activeElement instanceof HTMLElement && view.dom.contains(activeElement)
+      ? activeElement.closest<HTMLElement>('[data-comment-input="true"]')
+      : null;
+    if (!view.hasFocus && !commentInput) {
       return;
     }
 
@@ -3007,8 +3058,9 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       return;
     }
 
-    const head = view.state.selection.main.head;
-    const cursorRect = view.coordsAtPos(head);
+    const cursorRect = commentInput
+      ? commentInput.getBoundingClientRect()
+      : view.coordsAtPos(view.state.selection.main.head);
     if (!cursorRect) {
       return;
     }
@@ -4411,6 +4463,26 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={6}>{t('filesView.tree.actions.newFolderTitle')}</TooltipContent>
           </Tooltip>
+          {canUpload && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => pickFiles(root)}
+                    disabled={!root || isUploading}
+                    className="size-8 p-0 flex-shrink-0"
+                    title={t('sidebarFilesTree.actions.uploadFilesTitle')}
+                    aria-label={t('sidebarFilesTree.actions.uploadFilesTitle')}
+                  >
+                    <Icon name={isUploading ? 'loader-4' : 'upload-2'} className={cn('size-4', isUploading && 'animate-spin')} />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>{t('sidebarFilesTree.actions.uploadFilesTitle')}</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex flex-shrink-0">
@@ -4599,6 +4671,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         onClose={handleCloseDialog}
         inputRef={dialogInputRef}
       />
+      {uploadElements}
       {fullscreenViewer}
       {isMobile ? (
         showMobilePageContent ? (
