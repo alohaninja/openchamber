@@ -480,9 +480,11 @@ const VisibleSessionProjects: React.FC<SessionProjectCollectionProps> = ({ topol
     const work = showWork
       // A subagent's own work state never puts its run in work: the user works
       // in the sessions they started, as the Done button on a row reads it.
+      // A session in work whose directory no added project holds stays listed:
+      // In work spans projects, and it is the only place such a session shows.
       ? orderSidebarWorks(collection.orderedSessions, workIndex, (session) => (
         !session.parentID && !session.time?.archived && !isChatDirectoryPath(session.directory) && isSessionInWork(session)
-      )).filter((ref) => (ref.kind === 'session' ? !pinnedIds.has(ref.rootSessionId) : !pinnedKeys.has(ref.key)))
+      ), undefined, { isUnclaimedRoot: (session) => rootSessionIds.has(session.id) }).filter((ref) => (ref.kind === 'session' ? !pinnedIds.has(ref.rootSessionId) : !pinnedKeys.has(ref.key)))
       : [];
     // A worktree or a space with no session yet is in work while a draft is
     // begun there: the user just made it for a task. It opens the block, as

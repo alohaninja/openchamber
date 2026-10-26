@@ -53,6 +53,23 @@ describe('sidebar works', () => {
       .toEqual(['p:wt', 'session:root']);
   });
 
+  test('a root session no project section holds is its own work when unclaimed roots are listed', () => {
+    const index = buildSidebarWorkIndex([section]);
+    // `promoted` has no parentID but nests under `outside` by lineage (a
+    // promoted /btw or a review), so it is not a root of its own.
+    const order = [
+      session('w1'),
+      session('promoted', { directory: '/not-a-project' }),
+      session('outside', { directory: '/not-a-project' }),
+      session('root'),
+    ];
+    const isRoot = (entry: Session) => entry.id !== 'promoted';
+    expect(orderSidebarWorks(order, index, () => true).map((ref) => ref.key))
+      .toEqual(['p:wt', 'session:root']);
+    expect(orderSidebarWorks(order, index, () => true, undefined, { isUnclaimedRoot: isRoot }).map((ref) => ref.key))
+      .toEqual(['p:wt', 'session:outside', 'session:root']);
+  });
+
   test('a worktree keeps the place its archived newest session gave it', () => {
     const index = buildSidebarWorkIndex([section]);
     // Listed newest first: lonely (30), w1 (20), root (10). The worktree's

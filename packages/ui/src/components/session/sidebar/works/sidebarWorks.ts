@@ -11,7 +11,7 @@ import type { ProjectSection } from '../projects/sessionProjectRender';
  */
 export type SidebarWorkRef =
   | { kind: 'group'; key: string; projectId: string; group: SessionGroup }
-  | { kind: 'session'; key: string; projectId: string; rootSessionId: string };
+  | { kind: 'session'; key: string; projectId: string | null; rootSessionId: string };
 
 type SidebarGroupWorkRef = Extract<SidebarWorkRef, { kind: 'group' }>;
 
@@ -96,18 +96,26 @@ export const buildSidebarWorkIndex = (sections: readonly ProjectSection[]): Side
  * first of their sessions in `orderedSessions` (the sidebar's lifecycle order,
  * so a work moves up when any of its sessions does). With `archiveAnchors`
  * (`buildWorktreeArchiveAnchors`) a worktree work also stands where its
- * archived sessions hold it, and is listed for them alone.
+ * archived sessions hold it, and is listed for them alone. With
+ * `isUnclaimedRoot` a session no project section holds (its directory belongs
+ * to no added project) that the predicate calls a root is a work of its own,
+ * with no project, instead of being left out. The predicate decides by the
+ * sidebar's nesting, not `parentID` alone: a promoted /btw or a review nests
+ * under the session it came from and must not be listed twice.
  */
 export const orderSidebarWorks = (
   orderedSessions: readonly Session[],
   index: SidebarWorkIndex,
   include: (session: Session) => boolean,
   archiveAnchors: ReadonlyMap<string, number> = EMPTY_ANCHORS,
+  { isUnclaimedRoot }: { isUnclaimedRoot?: (session: Session) => boolean } = {},
 ): SidebarWorkRef[] => {
   const rankByKey = new Map<string, { ref: SidebarWorkRef; rank: number }>();
   orderedSessions.forEach((session, position) => {
     if (!include(session)) return;
-    const ref = index.bySessionId.get(session.id);
+    const ref = index.bySessionId.get(session.id) ?? (isUnclaimedRoot?.(session)
+      ? { kind: 'session', key: sessionWorkKey(session.id), projectId: null, rootSessionId: session.id } satisfies SidebarWorkRef
+      : undefined);
     if (ref && !rankByKey.has(ref.key)) rankByKey.set(ref.key, { ref, rank: position });
   });
   if (archiveAnchors.size === 0) return [...rankByKey.values()].map((entry) => entry.ref);
