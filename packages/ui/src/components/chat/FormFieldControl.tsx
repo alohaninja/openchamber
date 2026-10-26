@@ -1,5 +1,6 @@
 import React from 'react';
 import type { FormField } from '@opencode/client';
+import { useEmojiPicker } from '@/components/emoji/useEmojiPicker';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Radio } from '@/components/ui/radio';
 import { Icon } from '@/components/icon/Icon';
@@ -40,6 +41,7 @@ const AutoGrowTextarea = React.memo(function AutoGrowTextarea({
     onKeyDown,
 }: AutoGrowTextareaProps) {
     const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+    const emojiPicker = useEmojiPicker(textareaRef);
     const [localValue, setLocalValue] = React.useState(value);
 
     React.useEffect(() => {
@@ -70,25 +72,28 @@ const AutoGrowTextarea = React.memo(function AutoGrowTextarea({
     }, [localValue]);
 
     return (
-        <textarea
-            ref={textareaRef}
-            value={localValue}
-            placeholder={placeholder}
-            disabled={disabled}
-            autoFocus={autoFocus}
-            style={{ height: FORM_CUSTOM_TEXTAREA_MIN_HEIGHT }}
-            onChange={(event) => {
-                setLocalValue(event.target.value);
-                onValueChange(event.target.value);
-            }}
-            onKeyDown={onKeyDown}
-            className={cn(
-                'w-full resize-none rounded border border-border/30 bg-background/50 px-2 py-1',
-                'typography-meta text-foreground placeholder:text-muted-foreground/60',
-                'focus:outline-none focus:border-border/60',
-                disabled ? 'opacity-60' : null,
-            )}
-        />
+        <>
+            <textarea
+                ref={textareaRef}
+                value={localValue}
+                placeholder={placeholder}
+                disabled={disabled}
+                autoFocus={autoFocus}
+                style={{ height: FORM_CUSTOM_TEXTAREA_MIN_HEIGHT }}
+                onChange={(event) => {
+                    setLocalValue(event.target.value);
+                    onValueChange(event.target.value);
+                }}
+                onKeyDown={onKeyDown}
+                className={cn(
+                    'w-full resize-none rounded border border-border/30 bg-background/50 px-2 py-1',
+                    'typography-meta text-foreground placeholder:text-muted-foreground/60',
+                    'focus:outline-none focus:border-border/60',
+                    disabled ? 'opacity-60' : null,
+                )}
+            />
+            {emojiPicker}
+        </>
     );
 });
 
