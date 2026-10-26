@@ -535,14 +535,15 @@ user just made it for a task, so it opens the block. A worktree this client
 is removing keeps its place in the block until git is done
 (`useRemovingWorktreePaths`), though its sessions are archived first. A subagent's own state
 never counts. `list/SessionProjectCollection.tsx` orders the works by the first of
-their sessions in the shared lifecycle order (`works/sidebarWorks.ts`) and
-passes `workEntries` to the row model. A root session in work whose directory
-no added project holds (an agent moved it into another repository, say) is a
-session work of its own with no project (`isUnclaimedRoot`, the collection's
-root sessions, which leave out sessions nested by lineage): In work spans
-projects and is the only place such a session shows, so it is never dropped,
-as `lib/sidebarSessionRows.ts` promises the tray.
-The list by time does not add these. A work In work lists leaves its project
+their sessions in the shared lifecycle order (`orderInWorkWorks` in
+`works/sidebarWorks.ts`) and passes `workEntries` to the row model. In work
+spans projects: a session in work whose directory no added project holds (an
+agent moved it into another repository, say) is listed under the work of the
+top-level session it nests under (`buildSessionRootIndex`, over the
+collection's root sessions and `childrenMap`), with no project, as
+`lib/sidebarSessionRows.ts` describes for the tray. While the zone is shown it
+is the only place such a session appears: the list by time does not add these,
+so Done takes one out of the sidebar. A work In work lists leaves its project
 or folder (`movedSessionIds`, `movedGroupKeys`) unless "Also show in work
 under projects" is on; search lists every zone session once, in its zone,
 either way. VS Code always keeps them in place. Chats are never in work and
