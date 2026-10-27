@@ -574,7 +574,7 @@ In-app permission and form toasts for a directory without a store are shown from
 
 "Open session" on a permission or form toast opens the session and passes the request id to `request-reveal.ts`. The permission or form dock that holds that request expands, and the permission dock switches to it. Selecting the session alone would leave a dock the user collapsed collapsed when that session is already open. The id waits until a dock holds it, so a dock that mounts after the session switch still expands.
 
-An MCP elicitation arrives as a `form.created` whose `sessionID` is the `global` sentinel (`LOCATION_SCOPED_FORM_SESSION_ID` in `location-scoped-forms.ts`): no session record exists for it, so event routing does not treat it as a session address and it never enters the session routing index, otherwise a second directory's elicitation would land in the first one's store. OpenCode 2.0.27 through 2.1.3 publish these forms, `form.created` and `form.cancelled` alike, without a location, so the event names no directory either; 2.1.4 publishes them with their location, and the unlocated routing below goes once the minimum supported OpenCode reaches 2.1.4. `routeUnlocatedLocationScopedForm` handles such an event before routing: a settled form is handed to every store that holds its id, and a created form makes the stores whose directory may have asked it (a running turn, since an MCP server asks while one of its tools runs, plus the active directory) re-read their `global` forms, because filing it by guess would send the reply to a directory that answers "form not found". An event that does carry a directory is filed by that directory. The directory store keeps the form under `form["global"]`, bootstrap's directory-scoped `form.list` returns it like any pending form, `useScopedBlockingForms` surfaces it from every session of that directory, and reply/cancel resolve the directory from the store that holds it.
+An MCP elicitation arrives as a `form.created` whose `sessionID` is the `global` sentinel (`LOCATION_SCOPED_FORM_SESSION_ID` in `location-scoped-forms.ts`): no session record exists for it, so event routing does not treat it as a session address and it never enters the session routing index, otherwise a second directory's elicitation would land in the first one's store. Since 2.1.4 OpenCode publishes these forms, `form.created` and `form.cancelled` alike, with their location, so the event is filed by that directory. The directory store keeps the form under `form["global"]`, bootstrap's directory-scoped `form.list` returns it like any pending form, `useScopedBlockingForms` surfaces it from every session of that directory, and reply/cancel resolve the directory from the store that holds it.
 
 Error details for a failed turn (`notification-store.ts`, shown under the turn by `SessionErrorNotice`) are recorded before the directory-store lookup in `handleEvent`, so an unopened directory still keeps them. The subtask check reads the directory store when the directory is open and the global session cache otherwise. Event routing likewise consults the global session cache: a session-addressed event with no directory is routed to the directory the cache records for that session before any active-session or single-store fallback, so another project's events cannot land in the one open store.
 
@@ -585,6 +585,8 @@ Session display order is independent from streaming-frequency `time.updated` pub
 A background subagent keeps its parent's turn open for display. The parent goes idle while the child session works and runs again when OpenCode hands the result back; `global-session-status.ts` therefore holds the parent's timer through that pause (an idle parent with a running descendant does not settle, the last descendant to finish settles it, and snapshots count ancestors of running sessions as active). `useSessionTurnActivity` exposes that display state to rows, tabs and switchers. `statusById` and `activeSessionIds` stay the session's own status: sends, cleanup and retention must not treat an idle parent as busy. The parent lookup comes from the global sessions store through `setSessionParentResolver`, wired by `sync-context.tsx`.
 
 A background shell command keeps its session's turn open the same way. OpenCode settles a `shell` call with `background: true` at once, the session goes idle, and it runs again when the command's result is handed back. `background-shells.ts` indexes the commands OpenCode runs on behalf of a session (the shell tool tags each with `metadata.sessionID`): `shell.started`/`shell.ended` events keep it current for every directory, applied before status events in the same flush; a directory's `/api/shell` list is authoritative for that directory and is read by directory bootstrap and, on `server.connected`, for directories without a store that the index holds commands for. The list is keyed by the directory OpenCode answered for (symlinks resolved), which its shell events carry, and events that arrive while it is read win over it. A failed read changes nothing; a runtime switch resets the index and discards reads started before it. OpenCode runs every shell call as such a command, including one the turn waits for, so each entry carries `background`: set when the call that started it settles while it runs (`message.tool.transition` success with `metadata.status: "running"` and the `shellID`, remembered when it arrives before the start), false until then, and true for a command first seen in a list, which has no event to tell. The turn state below counts every command; the composer's background commands strip shows only background ones. A command that leaves the index moves to its `ended` list (extensions read it through `lib/guests/shells.ts`) with how it ended: `shell.exited` gives `exited` / `timeout` / `killed`, its exit code and the event time; `shell.deleted` of a running command is `stopped`, since only a user's Stop (the shell route) or an aborted turn removes a running command; a list read that no longer has the command records `unknown`. Removing a running command kills it, and OpenCode usually reports that kill as `shell.exited` with no exit code before the `shell.deleted`, so the index remembers each stop note (`message.updated` with `openchamberShellCancellation` metadata, written by `stopBackgroundShell` before it removes the command) and reads an exit without a code after one as `stopped`; an exit with a code after a stop that failed stays `exited`. Only the first end of a tracked command counts, so OpenCode evicting an exited command later (also `shell.deleted`) changes nothing. The list holds the latest `ENDED_SHELLS_MAX` (200) and resets with the index on a runtime switch. The session turn activity combines this index with live session status; the turn timer does not settle while a command runs, and the last command of an idle session ending settles it. The session's own status and the queue gate are unchanged: a dev server left running in the background must not hold queued messages.
+
+An agent that ended its turn to wait on its pull request reads as working too, last in that order (`pullRequest`). `pr-watch.ts` is the projection of the server's watches (`packages/web/server/lib/pr-watch`): `pr-watch-sync.ts` reads `GET /api/pr-watch` at mount and after every control-stream reconnect and applies `openchamber:pr-watch.updated` by revision, so an older update or snapshot never undoes a newer one; a runtime switch clears it. It only marks: the turn timer settles as usual, the queue is not held, and the server wakes the session. The composer row (`PullRequestWatchStrip`) stops a watch optimistically and puts it back when the server refuses.
 
 Starts are persisted so a reload resumes the same count, but a persisted start is a lookup table and never a claim of activity. **A busy status does not mark where a turn begins.** OpenCode publishes busy at every step of the agent loop, so a busy event means "still running", not "just started"; after a refresh one of those repeats normally beats the first status snapshot, so treating it as a turn boundary reset the counter on nearly every reload. Only `session.execution.started` marks a start, and a reload or a late join never sees it. Turn *ends* are marked — `session.idle` and `session.error` fire once, live, and retire the persisted record — while a snapshot that omits a session is not evidence of anything, since it may simply not see it yet.
 
@@ -897,7 +899,7 @@ Examples of global-store updates performed in `session-actions.ts`:
 - `unarchiveSession()` / `unarchiveSessions()` -> wait for server confirmation, then upsert each restored session. Restoring a top-level session brings its archived subsessions back with it. A subsession under an archived or unknown parent comes back only with that parent, and its id alone fails. A subsession archived on its own while its parent stays active restores alone and brings its own archived subsessions; `isRestorableOnItsOwn` (`session-restore-rule.ts`) is the one rule, shared with the Archive page and the chat header's session menu. `undo` still puts back exactly what an archive just moved.
 - `deleteSession()` / `deleteSessions()` -> wait for server confirmation or `404`, then remove the session and its persisted state
 - `moveSessionToDirectory()` -> move the session between directory stores and update the global directory index
-- `session.moved` (an agent's `session_move`, another client, or the echo of our own move) -> `adoptSessionMove()` does the same store move, routing registration and open-chat directory switch. A move the event already applied is kept when the request's response lands later. Without this the chat kept reading the source store while sends went to the destination, so a new prompt never appeared until the session was reopened. A chat pinned in the side panel (a subagent opened from the parent) is not the open chat; it reads the directory its session record names (`usePinnedSessionDirectory`), so it follows the move too instead of freezing at the move step. In a flushed batch the move runs after the stores publish, so the batch cannot write the session back into the source.
+- `session.moved` (an agent's `session_move`, another client, or the echo of our own move) -> `adoptSessionMove()` does the same store move, routing registration and open-chat directory switch. A move the event already applied is kept when the request's response lands later. Without this the chat kept reading the source store while sends went to the destination, so a new prompt never appeared until the session was reopened. A chat pinned in the side panel (a subagent opened from the parent) is not the open chat; it reads the directory its session record names (`usePinnedSessionDirectory`), so it follows the move too instead of freezing at the move step. In a flushed batch the move runs after the stores publish, so the batch cannot write the session back into the source. The move also drops the session's transcript and status from every other store and moves any pending permission or form they held into the destination; their session lists keep it, because a parent repository lists its worktrees' sessions. OpenCode reports the move's own steps (the delivered move notice) in the source directory in that same flush, and the transcript recovery they ask for runs after the move. A recovery for a session the store removed, no longer lists, and the global list places in another directory goes to that directory's store instead: read in the source, it put the transcript back into the store the session left, and the gap stayed in the one the chat reads.
 
 ### Blocking-request (form/permission) reply routing
 
@@ -923,12 +925,10 @@ OpenCode holds archive state since 2.1: archive and restore go through
 OpenChamber's batch routes (`session-archive-batch.ts`), which set it on
 OpenCode's record, and OpenCode announces `session.archived` /
 `session.unarchived` to every client, so a session archived in the TUI moves
-here too. A session whose directory was deleted cannot be changed on OpenCode
-where it is, so the server moves it to its project's main folder first
-(OpenCode announces `session.moved`); when archiving, its archive file marks
-the session archived before the move, so the sidebar never shows it as active
-under the project. The server folds that file onto the records it serves and
-announces its changes as `openchamber:session-archived`. Restore clears
+here too, and since 2.2 that works for a session whose directory was deleted.
+The server folds the archive file an older OpenChamber wrote onto the records
+it serves until its entries move to OpenCode, and announces the change as
+`openchamber:session-archived` when one leaves. Restore clears
 `time.archived`; every reader classifies archive state by its truthiness.
 
 OpenCode's `archived` list filter cannot see the sessions only that file
@@ -1063,7 +1063,8 @@ During streaming, `message.part.delta` fires ~60 times/sec. Eagerly cloning all 
 ## Event → field mapping
 
 Queue recovery is independent of the directory-bootstrap debounce. The sync
-provider subscribes to `message-queue-sync.ts` for control-stream updates and
+provider subscribes to `message-queue-sync.ts` (and to `auto-review-sync.ts`,
+which follows the same triggers for auto-review runs) for control-stream updates and
 requests a queue refresh on every main-stream connection or transport switch,
 including the first connection. The queue store coalesces these requests with
 bootstrap and owns snapshot ordering and legacy-upload lifetime.
@@ -1095,7 +1096,7 @@ These are `SyncEvent`s from `packages/ui/src/lib/opencode/events.ts`, not OpenCo
 
 ### Directory-less session events
 
-The global stream can omit a directory for a session-addressed event. Resolve it through the session routing index first. If the index is briefly stale during a session transition, route only when the event session matches the active session and that directory store exists; otherwise leave it un-routed rather than updating another directory.
+The global stream can omit a directory for a session-addressed event. OpenCode 2.1.4 can send `permission.asked` without a location. A permission or form event without a directory goes to the directory the global session list records for its session, when that store exists: the chat reads a session's requests from that store, and holding the session proves nothing, since a store the session moved out of gets a copy back when that directory is read again later (a stream reconnect, opening it) and that read points the index at it. Other events resolve through the session routing index first. If the index is briefly stale during a session transition, route only when the event session matches the active session and that directory store exists; otherwise leave it un-routed rather than updating another directory.
 
 ## Adding a new event type
 
@@ -1135,7 +1136,14 @@ the deferred one still names the previous session for one commit. A selection
 arriving from nothing (a draft just submitted, an empty chat) is not deferred:
 there is no previous conversation to keep, and a deferred `null` beside the
 already-closed draft rendered the empty state for a commit, remounting the
-whole column, composer and work-status card included.
+whole column, composer and work-status card included. The same session in
+another directory is not deferred either, whatever changed it: the old
+directory no longer holds the session or was only a guess (the directory
+adopted at startup, a runtime switch, following the chat to its archive, a
+new worktree session), so reading the session there is wrong. A move is the
+main case: it already took the session out of the old directory's store, and a
+commit still naming that directory had the chat's load effect read the session
+and its transcript back into it.
 
 A session whose messages are not in memory at the click keeps the previous
 timeline on screen while they load (up to 400ms), then swaps straight to the
@@ -1249,10 +1257,18 @@ way: a window on that instance opens the session in place, any other hands
 it to `openHostWindow` through `desktop_open_host_session`, together with
 the `?message=` it names. A mini-chat routes them the same way, since with
 the main window closed it is the window that receives them. The renderer
-decides because main cannot: the main window carries no host tag and can
-switch instance in place, so only its runtime key says what it shows. A main
-window switched in place to a direct instance holds a `url:` key, so a link
-that names that instance by id still opens a separate window for it.
+decides because main cannot: a window can switch instance in place, so
+only its runtime key says what it shows. On desktop a window reports that
+key to main at boot and on every switch (`desktop_set_window_runtime_key`),
+and `openHostWindow` looks for a window to reuse first by the live key,
+then by the creation-time tag: a link that names an instance lands in
+whichever open window shows it, including a main window switched in place
+and a switcher window opened for a direct instance, which main marks the
+same way it marks relay windows. A notification a window forwards names its
+owner by the same rule: the instance the window reports, and the creation-time
+tag only before it has reported. A notification click brings the receiving
+window forward only when it already shows the instance that owns the
+session; otherwise the window it hands the session to is the one raised.
 
 On launch the app reopens the session that was open when it closed
 (`sync/last-session-restore.ts`, used by `App` for web and desktop and by the

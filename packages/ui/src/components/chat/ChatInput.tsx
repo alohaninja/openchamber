@@ -8,7 +8,7 @@ import { useConfigStore } from '@/stores/useConfigStore';
 import { filterVisibleAgents } from '@/stores/useAgentsStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { isServerOwnedMessageQueue, createMessageQueueTarget, getMessageQueueKey, useMessageQueueStore, type QueuedContextPart, type QueuedMessage, type QueuedMessageGoal } from '@/stores/messageQueueStore';
-import { useAutoReviewStore } from '@/stores/useAutoReviewStore';
+import { selectAutoReviewRunning, useAutoReviewStore } from '@/stores/useAutoReviewStore';
 import { useSessionGoalArmStore } from '@/stores/useSessionGoalArmStore';
 import { useSessionUIStore, type NewSessionDraftState } from '@/sync/session-ui-store';
 import { useSelectionStore } from '@/sync/selection-store';
@@ -59,10 +59,12 @@ import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
 import type { ToolPopupContent } from './message/types';
 import { QueuedMessagesStrip } from './QueuedMessagesStrip';
 import { AutoReviewStrip } from './AutoReviewStrip';
+import { PullRequestWatchStrip } from './PullRequestWatchStrip';
 import type { FileMentionHandle } from './FileMentionAutocomplete';
 import type { CommandAutocompleteHandle, CommandInfo } from './CommandAutocomplete';
 import type { SkillAutocompleteHandle } from './SkillAutocomplete';
 import type { SnippetAutocompleteHandle } from './SnippetAutocomplete';
+import { withoutSnippetToken } from '@/lib/snippetNames';
 import type { EmojiAutocompleteHandle } from '@/components/emoji/EmojiAutocomplete';
 import { cn } from "@/lib/utils";
 import { ModelControls } from './ModelControls';
@@ -1352,11 +1354,11 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const { phase: currentSessionPhase } = useSessionActivity(currentSessionId, currentSessionDirectoryForSync ?? currentDirectory ?? undefined);
     const { phase: btwSessionPhase } = useSessionActivity(btwSessionId, btwDirectory ?? undefined);
     const sessionPhase = isBtwActive ? btwSessionPhase : currentSessionPhase;
-    const autoReviewRunning = useAutoReviewStore(React.useCallback((state) => {
-        if (!currentSessionId) return false;
-        const run = state.runsByOriginalSessionID[currentSessionId];
-        return run?.status === 'running' && run.runtimeKey === getRuntimeKey();
-    }, [currentSessionId]));
+    const autoReviewDirectory = currentSessionDirectoryForSync ?? currentDirectory;
+    const autoReviewRunning = useAutoReviewStore(React.useMemo(
+        () => selectAutoReviewRunning(currentSessionId, autoReviewDirectory),
+        [currentSessionId, autoReviewDirectory],
+    ));
 
     const handleOpenMobilePanel = React.useCallback((panel: MobileControlsPanel) => {
         if (!isMobile) {
@@ -3576,6 +3578,13 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         composerRef.current?.focus();
     });
 
+    // "Save draft as #name": the draft goes into the snippet without the
+    // `#name` being typed, and once saved that token leaves the composer.
+    const snippetDraftText = openAutocomplete === 'snippet' ? withoutSnippetToken(message, autocompleteQuery) : undefined;
+    const handleSnippetDraftSaved = useStableHandler((typedName: string) => {
+        setMessage(withoutSnippetToken(messageRef.current, typedName));
+    });
+
     const handleEmojiSelect = useStableHandler((emoji: string) => {
         const cursorPosition = composerRef.current?.getSelection().start ?? message.length;
         const startIndex = Math.max(0, cursorPosition - autocompleteQuery.length - 1);
@@ -4325,6 +4334,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         ? <ComposerStatusStrip icon="time" text={t('spaces.draft.queued')} />
         : null;
     const autoReviewRow = !isBtwActive && !newSessionDraftOpen ? <AutoReviewStrip /> : null;
+    // The agent waits on its pull request; the server wakes it.
+    const prWatchRow = !isBtwActive && !newSessionDraftOpen ? <PullRequestWatchStrip sessionId={currentSessionId} /> : null;
     // The session's goal, then what is still running, then what waits for it.
     const goalRow = !isBtwActive ? (
         <SessionGoalRow
@@ -4348,12 +4359,13 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     ) : null;
     // Null exactly when the suggestion row alone would have been: the mobile
     // pill picks its shape from whether a top row exists.
-    const composerTopRows = worktreeSetupRow || spaceWaitRow || goalRow || autoReviewRow || backgroundShellsRow || revertRow || queueRow || doneHintRow || reviewHintRow || suggestionRow ? (
+    const composerTopRows = worktreeSetupRow || spaceWaitRow || goalRow || autoReviewRow || prWatchRow || backgroundShellsRow || revertRow || queueRow || doneHintRow || reviewHintRow || suggestionRow ? (
         <>
             {worktreeSetupRow}
             {spaceWaitRow}
             {goalRow}
             {autoReviewRow}
+            {prWatchRow}
             {backgroundShellsRow}
             {revertRow}
             {queueRow}
@@ -4668,6 +4680,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                         onCommandSelect={handleCommandSelect}
                         onSkillSelect={handleSkillSelect}
                         onSnippetSelect={handleSnippetSelect}
+                        snippetDraftText={snippetDraftText}
+                        onSnippetDraftSaved={handleSnippetDraftSaved}
                         onFileSelect={handleFileSelect}
                         onAgentSelect={handleAgentSelect}
                         // VS Code shows no reference chips, so it cannot hold one.

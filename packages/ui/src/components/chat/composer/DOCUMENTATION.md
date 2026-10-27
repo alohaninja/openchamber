@@ -96,7 +96,7 @@ time; the reducer trims by creation time).
 The composer's top rows render inside the box and inside the mobile pill, so
 the surface stays one shape. Top to bottom: worktree setup and a message
 waiting for its space (`ComposerStatusStrip`), the goal (`SessionGoalRow`), a
-running review loop (`AutoReviewStrip`), background commands, a staged revert
+review loop and, once it ends, its result until dismissed, a dispute unfolding in place (`AutoReviewStrip`), the pull request the agent waits on with Stop watching (`PullRequestWatchStrip`), background commands, a staged revert
 (`RevertedMessagesStrip`), the queue (`QueuedMessagesStrip`),
 the "looks done" hint or the review offer, the suggestion
 (`SessionSuggestionChip`). BTW hides all of them. A pending form, a nonempty
@@ -428,6 +428,15 @@ and one Backspace removes it. File and agent mentions, skills and snippets
 chip the same way; a token whose last character was just typed stays text
 until typing moves on, so a name is never chipped halfway. Commands keep
 their color only.
+
+The `#` snippet picker (`chat/SnippetAutocomplete.tsx`) also creates
+snippets. A typed name no snippet answers to offers "Create #name" and, in the
+main composer, "Save draft as #name" with the draft minus the token being
+typed; once saved, that token leaves the draft. Every create row opens the
+quick dialog (`components/snippets/SnippetQuickCreateDialog.tsx`, mounted once
+per app shell) and never writes on its own, so Enter on `fix #42` cannot make
+a snippet. The same dialog backs "Save as snippet" on a user message and on a
+text selection.
 
 Desktop comment fields in ordinary page DOM (chat quote comments, editing a
 pending comment above the composer) are `components/comments/CommentTextEditor`:
