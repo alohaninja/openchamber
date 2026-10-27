@@ -1917,6 +1917,37 @@ describe('useConfigStore provider persistence', () => {
     expect(useConfigStore.getState().providers[0]?.id).toBe('b');
   });
 
+  test('the startup agent recheck still discovers agents in the same runtime', async () => {
+    liveAgents = [testAgent('build')];
+    switchRuntimeEndpoint({ apiBaseUrl: 'https://recheck-current.example', runtimeKey: 'recheck-current' });
+    await useConfigStore.getState().initializeApp();
+    expect(useConfigStore.getState().agents.map((agent) => agent.name)).toEqual(['build']);
+
+    liveAgents = [testAgent('build'), testAgent('plugin-agent')];
+    await new Promise((resolve) => setTimeout(resolve, 8_100));
+    expect(useConfigStore.getState().directoryScoped[DIRECTORY]?.agents.map((agent) => agent.name)).toEqual(['build', 'plugin-agent']);
+  }, 12_000);
+
+  for (const returnToFirstRuntime of [false, true]) {
+    test(`the startup agent recheck cannot outlive its runtime${returnToFirstRuntime ? ' after a round trip' : ''}`, async () => {
+      liveAgents = [testAgent('build')];
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://recheck-a.example', runtimeKey: 'recheck-a' });
+      await useConfigStore.getState().initializeApp();
+      expect(useConfigStore.getState().agents.map((agent) => agent.name)).toEqual(['build']);
+
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://recheck-b.example', runtimeKey: 'recheck-b' });
+      if (returnToFirstRuntime) {
+        switchRuntimeEndpoint({ apiBaseUrl: 'https://recheck-a.example', runtimeKey: 'recheck-a' });
+      }
+      const callsAfterSwitch = listAgentsCalls;
+      // Wait beyond the delayed startup recheck. It must neither start a
+      // location on the new runtime nor seed that runtime's directory catalog.
+      await new Promise((resolve) => setTimeout(resolve, 8_100));
+      expect(listAgentsCalls).toBe(callsAfterSwitch);
+      expect(useConfigStore.getState().directoryScoped).toEqual({});
+    }, 12_000);
+  }
+
   test('an A to B to A switch still rejects the first A completion', async () => {
     const pending = deferred<TestProviderResponse>();
     switchRuntimeEndpoint({ apiBaseUrl: 'https://roundtrip-a.example', runtimeKey: 'roundtrip-a' });
