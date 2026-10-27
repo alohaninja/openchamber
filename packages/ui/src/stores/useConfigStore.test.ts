@@ -1928,6 +1928,19 @@ describe('useConfigStore provider persistence', () => {
     expect(useConfigStore.getState().directoryScoped[DIRECTORY]?.agents.map((agent) => agent.name)).toEqual(['build', 'plugin-agent']);
   }, 12_000);
 
+  test('the startup agent recheck survives a transport change for the same instance', async () => {
+    liveAgents = [testAgent('build')];
+    switchRuntimeEndpoint({ apiBaseUrl: 'https://transport-one.example', runtimeKey: 'same-device' });
+    await useConfigStore.getState().initializeApp();
+    expect(useConfigStore.getState().agents.map((agent) => agent.name)).toEqual(['build']);
+
+    // Mobile rebinds the SDK for LAN/relay changes without initializing again.
+    switchRuntimeEndpoint({ apiBaseUrl: 'https://transport-two.example', runtimeKey: 'same-device' });
+    liveAgents = [testAgent('build'), testAgent('plugin-agent')];
+    await new Promise((resolve) => setTimeout(resolve, 8_100));
+    expect(useConfigStore.getState().directoryScoped[DIRECTORY]?.agents.map((agent) => agent.name)).toEqual(['build', 'plugin-agent']);
+  }, 12_000);
+
   for (const returnToFirstRuntime of [false, true]) {
     test(`the startup agent recheck cannot outlive its runtime${returnToFirstRuntime ? ' after a round trip' : ''}`, async () => {
       liveAgents = [testAgent('build')];
