@@ -168,6 +168,12 @@
     "agentRenderToolEnabled": {
       "scope": "instance"
     },
+    "agentImageToolEnabled": {
+      "scope": "instance"
+    },
+    "agentImageModel": {
+      "scope": "instance"
+    },
     "agentToolsCodeMode": {
       "scope": "instance"
     },
@@ -253,6 +259,9 @@
     "sttLanguage": {
       "scope": "profile"
     },
+    "sttCorrectTranscript": {
+      "scope": "profile"
+    },
     "tunnelProvider": {
       "scope": "instance"
     },
@@ -329,6 +338,9 @@
     "sidebarDetailedZoneRows": {
       "scope": "profile",
       "perSurface": true
+    },
+    "sidebarWorktreeNameByBranch": {
+      "scope": "profile"
     },
     "workStatusSectionOrder": {
       "scope": "profile"
@@ -478,6 +490,14 @@
       ]
     },
     "openTrackerLinksOnBoard": {
+      "scope": "profile",
+      "surfaces": [
+        "web",
+        "desktop",
+        "mobile"
+      ]
+    },
+    "terminalCloseOnExit": {
       "scope": "profile",
       "surfaces": [
         "web",

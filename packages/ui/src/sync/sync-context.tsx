@@ -57,10 +57,7 @@ import {
 } from "./session-event-router"
 import { shouldConsumeBulkArchiveEcho } from "./bulk-archive-echo"
 import { applyForkedSession, noteForkedSessionPatched } from "./forked-session"
-import {
-  LOCATION_SCOPED_FORM_SESSION_ID,
-  routeUnlocatedLocationScopedForm,
-} from "./location-scoped-forms"
+import { LOCATION_SCOPED_FORM_SESSION_ID } from "./location-scoped-forms"
 import { useUIStore } from "@/stores/useUIStore"
 import { useBtwStore } from "@/stores/useBtwStore"
 import { selectNewChildSessions } from "./child-session-discovery"
@@ -74,7 +71,10 @@ import { usePermissionStore } from "@/stores/permissionStore"
 import { policySnapshotFromWire } from "@/stores/utils/permissionAutoAccept"
 import { selectSafetyNetAvailable, useRoutingStore } from "@/stores/useRoutingStore"
 import { useMessageQueueStore } from "@/stores/messageQueueStore"
+import { isAutoReviewAvailable, useAutoReviewStore } from "@/stores/useAutoReviewStore"
 import { subscribeMessageQueueSync } from "./message-queue-sync"
+import { subscribeAutoReviewSync } from "./auto-review-sync"
+import { subscribePrWatchSync } from "./pr-watch-sync"
 import { subscribeSessionWarmingSync } from "./session-warming-sync"
 import { subscribeSessionFoldersSync } from "./session-folders-sync"
 import { subscribeSessionDraftsSync } from "./session-drafts-sync"
@@ -139,6 +139,7 @@ import { isFilesystemError } from "@/lib/api/files-errors"
 import { formatMessage, useI18nStore } from "@/lib/i18n"
 import { sessionEvents } from "@/lib/sessionEvents"
 import { fileTreeChanges } from "@/lib/fileTreeChanges"
+import { notifyWatchedFileChanged, renewWatchedFiles } from "@/lib/watchedFiles"
 import { listGlobalSessionPages, splitGlobalSessionsByArchived, type GlobalSessionRecord, type SessionPageLister } from "@/stores/globalSessions"
 import { areRequestArraysReferentiallyEqual, collectScopedBlockingRequests } from "./scoped-blocking-requests"
 import { EMPTY_USER_MESSAGE_HISTORY_SNAPSHOT, buildUserMessageHistorySnapshot, type TranscriptPrompt, type UserMessageHistorySnapshot } from "./user-message-history"
@@ -2066,6 +2067,13 @@ export function handleEvent(
     return
   }
 
+  // A watched file changed: the views showing it re-read it (`lib/watchedFiles`).
+  if (payload.type === "filesystem.changed") {
+    if (expectedRuntimeKey !== getRuntimeKey()) return
+    notifyWatchedFileChanged(payload.properties.file)
+    return
+  }
+
   // Workflow runs live in their own store, keyed by the session that proposed them.
   if (payload.type === "openchamber.workflow-run") {
     if (expectedRuntimeKey !== getRuntimeKey()) return
@@ -2084,17 +2092,6 @@ export function handleEvent(
   }
 
   if (shouldConsumeBulkArchiveEcho(payload, expectedRuntimeKey)) return
-
-  const routedAsUnlocatedForm = routeUnlocatedLocationScopedForm(normalizeEventDirectory(rawDirectory), payload, {
-    stores: Array.from(childStores.children, ([dir, store]) => [dir, getDirectoryEventState(store, batch)] as const),
-    activeDirectory: opencodeClient.getDirectory(),
-    redirect: (dir) => handleEvent(dir, payload, childStores, routingIndex, expectedRuntimeKey, false, streamingDirectory, batch),
-    resync: (dir) => {
-      const store = childStores.getChild(dir)
-      if (store) void resyncBlockingRequestsForDirectory(dir, store, [LOCATION_SCOPED_FORM_SESSION_ID], { includePermissions: false })
-    },
-  })
-  if (routedAsUnlocatedForm) return
 
   const directory = resolveDirectoryFromRoutingIndex(routingIndex, rawDirectory, payload, childStores, batch)
 
@@ -2965,6 +2962,7 @@ export function SyncProvider(props: {
   useEffect(() => {
     void usePermissionStore.getState().hydrate().catch(() => undefined)
     void useMessageQueueStore.getState().hydrate().catch(() => undefined)
+    if (isAutoReviewAvailable()) void useAutoReviewStore.getState().hydrate().catch(() => undefined)
   }, [props.sdk])
 
   useEffect(() => {
@@ -3194,6 +3192,8 @@ export function SyncProvider(props: {
   // Abort controller owned by the pipeline closure. Cleanup aborts + flushes.
   useEffect(() => {
     const unsubscribeQueueEvents = subscribeMessageQueueSync(runtimeKey)
+    const unsubscribeAutoReviewEvents = subscribeAutoReviewSync(runtimeKey)
+    const unsubscribePrWatchEvents = subscribePrWatchSync(runtimeKey)
     const unsubscribeSessionWarming = subscribeSessionWarmingSync(runtimeKey)
     const unsubscribeFolderEvents = subscribeSessionFoldersSync(runtimeKey)
     const unsubscribeDraftEvents = subscribeSessionDraftsSync(runtimeKey)
@@ -3295,6 +3295,8 @@ export function SyncProvider(props: {
         void useMessageQueueStore.getState().resync().catch(() => undefined)
         // Workflow run changes during a gap are not replayed: read the shown sessions' runs again.
         useWorkflowRunsStore.getState().reloadLoaded()
+        // OpenCode keeps file watches in memory; a restart behind the gap dropped them.
+        renewWatchedFiles()
         useConfigStore.setState({
           isConnected: true,
           hasEverConnected: true,
@@ -3340,6 +3342,8 @@ export function SyncProvider(props: {
       }
       pipeline.cleanup()
       unsubscribeQueueEvents()
+      unsubscribeAutoReviewEvents()
+      unsubscribePrWatchEvents()
       unsubscribeSessionWarming()
       unsubscribeFolderEvents()
       unsubscribeDraftEvents()
